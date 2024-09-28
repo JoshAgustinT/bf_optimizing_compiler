@@ -19,6 +19,7 @@ vector<char> program_file;
 ofstream *output_file;
 int loop_num = -1;
 stack<int> myStack;
+int tape_size = 1000000;
 
 void bf_assembler(char token)
 {
@@ -186,14 +187,14 @@ void asm_setup()
     // Allocate 16 bytes of stack space for local variables
     *output_file << "subq	$16, %rsp" << endl;
     // Allocate 100,000 bytes with malloc
-    *output_file << "movl	$100000, %edi" << endl;
+    *output_file << "movl	$" << to_string(tape_size) << ", %edi" << endl;
     *output_file << "call	malloc@PLT" << endl;
     // Store the pointer returned by malloc in the local variable at -8(%rbp)
     *output_file << "movq	%rax, -8(%rbp)" << endl;
 
     // Calculate the address 50,000 bytes into the allocated memory
-    *output_file << "movq    -8(%rbp), %rax" << endl; // Load base address into %rax
-    *output_file << "addq    $50000, %rax" << endl;   // Add the offset to %rax
+    *output_file << "movq    -8(%rbp), %rax" << endl;                            // Load base address into %rax
+    *output_file << "addq    $" << to_string(tape_size / 2) << ", %rax" << endl; // Add the offset to %rax
 
     // Store the adjusted pointer back at -8(%rbp)
     *output_file << "movq    %rax, -8(%rbp)" << endl;
@@ -209,6 +210,7 @@ void asm_cleanup()
     *output_file << "popq    %rbp" << endl;
     // Return from the function
     *output_file << "ret" << endl;
+    *output_file << endl;
 }
 /*
 Turn  vector<char> bf program to vector<string>, to support saving complex instructions
@@ -295,19 +297,8 @@ vector<string> get_loop_string(int j, vector<string> list)
             if (list[j] == "]")
                 count--;
 
-            if (
-                list[j] == ">" ||
-                list[j] == "<" ||
-                list[j] == "+" ||
-                list[j] == "-" ||
-                list[j] == "." ||
-                list[j] == "," ||
-                list[j] == "[" ||
-                list[j] == "]")
-            {
-                // Code for handling valid instr
-                return_list.push_back(list[j]);
-            }
+            // Code for handling valid instr
+            return_list.push_back(list[j]);
         }
 
         return return_list;
@@ -368,6 +359,11 @@ bool is_simple_loop(vector<string> loop_string)
             {
                 net_loop_cell_value--;
             }
+        }
+        if (token.compare(0, 12, "expr_simple:") == 0)
+        {
+            answer = false;
+            break;
         }
 
     } // end for loop
@@ -489,6 +485,10 @@ vector<string> optimize_simple_loop(int loop_index, vector<string> loop, vector<
     {
         program[loop_index + i] = "#";
     }
+    // remove loop if [], should never fire unless infinite loop
+    if (loop.size() == 2)
+        return program;
+
     program[loop_index] = expr_dict_to_string(dict);
 
     return program;
@@ -541,7 +541,7 @@ void print_padding()
     *output_file << endl
                  << endl;
 }
-
+string temp = ".j";
 void bf_assembler_string(string token)
 {
 
@@ -685,54 +685,49 @@ void bf_assembler_string(string token)
     {
 
         map<int, int> simple_expr = expr_string_to_dict(token);
-        print_int_int_map(simple_expr);
+        //print_int_int_map(simple_expr);
+        //*output_file << "opt:" << endl;
 
-        // first: current cell = (current cell + first)
-        // second: add second to conent of cell, could be + or -
         print_padding();
-        //*output_file << "josh" << endl;
+        // 8 bit regists, AH AL BH BL CH CL DH DL
+        // ch and bl work
 
+        //  address when we begin the loop
+        *output_file << "movq    -8(%rbp), %rdx" << endl;
+        // copy of what was at the cell at begining
+        *output_file << "movq    (%rdx), %rcx" << endl;
+        
         for (const auto &pair : simple_expr)
         {
-            // pair.first;
-            // pair.second;
-            // Load current cell address into %rax
-            *output_file << "movq    -8(%rbp), %rax" << endl;
-            *output_file << "movb    (%rax), %r14b" << endl;
+            
+            // pair.first = pointer offset
+            // pair.second = cell +- change per loop
 
-            *output_file << "imulq   $" << to_string(pair.second) << ", %r14" << endl;
+            // copy address of the first loop cell
+            *output_file << "movq   %rdx, %r12" << endl;
+            // adjust pointer by our offset
+            *output_file << "addq   $" << to_string(pair.first) << ", %r12" << endl;
+            // set our constant change of cell
+            *output_file << "movq    $" << to_string((pair.second)) << ", %r15" << endl;
+            // constant multiplied by times loop happens
+            *output_file << "imul   %rcx, %r15" << endl;
+            
+                        // //should zero out anything above the 8 bits, since we only care about byte
+                        // *output_file << "xor %ebx, %ebx "<<endl;
+                        // *output_file << "movb    (%r12), %bl" << endl;
+                        // *output_file << "movb    %bl, (%r12)" << endl;
 
-            ////add or sub pointer
-            // if (pair.first >= 0)
-            *output_file << "addq    $" << to_string(pair.first) << ", %rax" << endl;
-            // else
-            //     *output_file << "subq    $" << to_string(abs(pair.first)) << ", %rax" << endl;
-
-            // Load byte into %cl (lower 8 bits)
-            *output_file << "movb    (%rax), %cl" << endl;
-            // Add 1 to the byte
-            *output_file << "addb    %r14b, %cl" << endl;
-            // Store the modified byte back to the address in %rax
-            *output_file << "movb    %cl, (%rax)" << endl;
+            //save result inside our cell
+            *output_file << "addb    %r15b , (%r12)" << endl;
+    
+            
             print_padding();
+            // here
         }
+        // our loop should always end in 0, this assures it, but would break intentional infinite loops
+        // *output_file << "movb    $0, (%rdx)" << endl;
 
-        //// asm of >
-        // // Load base address into %rax
-        // *output_file << "movq    -8(%rbp), %rax" << endl;
-        // // add one to pointer address
-        // *output_file << "addq    $1, %rax" << endl;
-        // // Store the adjusted pointer back at -8(%rbp)
-        // *output_file << "movq    %rax, -8(%rbp)" << endl;
-        //// asm of +
-        // Load base address into %rax
-        //  *output_file << "movq    -8(%rbp), %rax" << endl;
-        //  Load byte into %cl (lower 8 bits)
-        //  *output_file << "movb    (%rax), %cl" << endl;
-        //  Add 1 to the byte
-        //  *output_file << "addb    $1, %cl" << endl;
-        //  Store the modified byte back to the address in %rax
-        //  *output_file << "movb    %cl, (%rax)" << endl;
+        ;
     }
 
 } // end asm_string
@@ -768,12 +763,16 @@ int main(int argc, char *argv[])
     }
 
     asm_setup();
+    print_padding();
+    bool opt = true;
 
-    if (1)
+    if (opt)
     {
         vector<string> optimized_program = init_optimized_program_list(program_file);
 
-        // cout << "Simple loops: " << endl;
+        // print program without non-instructions
+        // print_string_vector(optimized_program);
+        //  cout << "Simple loops: " << endl;
         unordered_set<int> loop_indices = get_loop_indices(optimized_program);
 
         for (auto token : loop_indices)
@@ -782,44 +781,38 @@ int main(int argc, char *argv[])
 
             if (is_simple_loop(loop))
             {
-                // print_string_vector(loop);
+                 print_string_vector(loop);
                 optimized_program = optimize_simple_loop(token, loop, optimized_program);
 
                 // print_string_vector(optimized_program);
-                //  string test = "expr_simple:0:-1,1:7,2:10,3:3,4:1,";
-                //  map<int, int> output = expr_string_to_dict(test);
-                //  print_int_int_map(output);
+                //    string test = "expr_simple:0:-1,1:7,2:10,3:3,4:1,";
+                //    map<int, int> output = expr_string_to_dict(test);
+                //    print_int_int_map(output);
             }
         }
-
-        // cout << "Seek loops: " << endl;
-        // for (auto token : loop_indices)
-        // {
-        //     vector<string> loop = get_loop_string(token, optimized_program);
-
-        //     if (is_seek_loop(loop))
-        //         print_string_vector(loop);
-        // }
 
         for (int i = 0; i < optimized_program.size(); i++)
         {
             string token = optimized_program[i];
             bf_assembler_string(token);
         }
+
+        // print_string_vector(optimized_program);
     }
 
-    // // begin our program compiler loop
-    // for (int i = 0; i < program_file.size(); i++)
-    // {
-    //     char ch = program_file[i];
-    //     bf_assembler(ch);
-    // }
+    if (!opt)
+    {
+        // // begin our program compiler loop
+        for (int i = 0; i < program_file.size(); i++)
+        {
+            char ch = program_file[i];
+            bf_assembler(ch);
+        }
+    }
 
     asm_cleanup();
 
     // Close the file
     outFile.close();
-
-    cout << "bf program compiled successfully." << endl;
 
 } // end main()
