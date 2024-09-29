@@ -308,14 +308,49 @@ vector<string> get_loop_string(int j, vector<string> list)
     return return_list;
 }
 
+// tells us net change of our initial cell
+int cell_net_change(vector<string> loop_string)
+{
+    int cell = 0;
+    int cell_value = 0;
+    // iterate over body of loop ie -> [...]
+    for (int i = 1; i < loop_string.size() - 1; i++)
+    {
+        string token = loop_string[i];
+
+        if (token == "<")
+            cell--;
+        if (token == ">")
+            cell++;
+
+        if (token == "+")
+        {
+            if (cell == 0)
+            {
+                cell_value++;
+            }
+        }
+        if (token == "-")
+        {
+            if (cell == 0)
+            {
+                cell_value--;
+            }
+        }
+
+    } // end for loop
+
+    return cell_value;
+}
+
 /*
 Checks if input string is a simple loop
 */
 bool is_simple_loop(vector<string> loop_string)
 {
     bool answer = true;
-    int net_cell_change = 0;
-    int net_loop_cell_value = 0;
+    int cell_offset = 0;
+    int loop_cell_value = 0;
     // iterate over body of loop ie -> [...]
     for (int i = 1; i < loop_string.size() - 1; i++)
     {
@@ -342,22 +377,22 @@ bool is_simple_loop(vector<string> loop_string)
             break;
         }
         if (token == "<")
-            net_cell_change--;
+            cell_offset--;
         if (token == ">")
-            net_cell_change++;
+            cell_offset++;
 
         if (token == "+")
         {
-            if (net_cell_change == 0)
+            if (cell_offset == 0)
             {
-                net_loop_cell_value++;
+                loop_cell_value++;
             }
         }
         if (token == "-")
         {
-            if (net_cell_change == 0)
+            if (cell_offset == 0)
             {
-                net_loop_cell_value--;
+                loop_cell_value--;
             }
         }
         if (token.compare(0, 12, "expr_simple:") == 0)
@@ -368,10 +403,10 @@ bool is_simple_loop(vector<string> loop_string)
 
     } // end for loop
 
-    if (net_cell_change != 0)
+    if (cell_offset != 0)
         answer = false;
 
-    if (abs(net_loop_cell_value) != 0 && abs(net_loop_cell_value) != 1)
+    if (abs(loop_cell_value) != 1)
         answer = false;
 
     return answer;
@@ -425,9 +460,17 @@ void print_string_vector(vector<string> list)
 
     cout << endl;
 }
-string expr_dict_to_string(map<int, int> dict)
+string expr_dict_to_string(map<int, int> dict, int loop_increment)
 {
+
     string sb = "expr_simple:";
+
+    // will tell us if we have +1 or -1 simple loops.
+    if (loop_increment >= 0)
+        sb += "+";
+
+    else
+        sb += "-";
 
     for (const auto &pair : dict)
     {
@@ -453,7 +496,7 @@ void print_int_int_map(map<int, int> dict)
         cout << endl;
     }
 }
-vector<string> optimize_simple_loop(int loop_index, vector<string> loop, vector<string> program)
+vector<string> optimize_simple_loop(int loop_index, int loop_increment, vector<string> loop, vector<string> program)
 {
 
     map<int, int> dict;
@@ -483,13 +526,13 @@ vector<string> optimize_simple_loop(int loop_index, vector<string> loop, vector<
 
     for (int i = 0; i < loop.size(); i++)
     {
-        program[loop_index + i] = "#";
+        program[loop_index + i] = " ";
     }
     // remove loop if [], should never fire unless infinite loop
-    if (loop.size() == 2)
-        return program;
+    // if (loop.size() == 2)
+    //     return program;
 
-    program[loop_index] = expr_dict_to_string(dict);
+    program[loop_index] = expr_dict_to_string(dict, loop_increment);
 
     return program;
 }
@@ -501,8 +544,8 @@ map<int, int> expr_string_to_dict(string expr)
     // Check if the string starts with "expr_simple:"
     if (expr.compare(0, 12, "expr_simple:") == 0)
     {
-        // Remove the prefix
-        expr.erase(0, 12);
+        // Remove the prefix, plus the sign attached
+        expr.erase(0, 13);
         // cout << expr << endl;
         //  example- 0:-1,1:7,2:10,3:3,4:1,
         std::string first, second;
@@ -541,9 +584,10 @@ void print_padding()
     *output_file << endl
                  << endl;
 }
-string temp = ".j";
+
 void bf_assembler_string(string token)
 {
+    print_padding();
 
     if (token == ">")
     {
@@ -684,51 +728,73 @@ void bf_assembler_string(string token)
     if (startsWith(token, "expr_simple:"))
     {
 
+        string sign_of_loop;
+        if (startsWith(token, "expr_simple:+"))
+            sign_of_loop = "+";
+
+        if (startsWith(token, "expr_simple:-"))
+            sign_of_loop = "-";
+
+        // if +, we perform loop 256-255 times
+        // if -, we perform full p[0] times
+
         map<int, int> simple_expr = expr_string_to_dict(token);
-        //print_int_int_map(simple_expr);
+        // print_int_int_map(simple_expr);
         //*output_file << "opt:" << endl;
 
-        print_padding();
         // 8 bit regists, AH AL BH BL CH CL DH DL
         // ch and bl work
 
         //  address when we begin the loop
-        *output_file << "movq    -8(%rbp), %rdx" << endl;
-        // copy of what was at the cell at begining
-        *output_file << "movq    (%rdx), %rcx" << endl;
-        
+        *output_file << "movq    -8(%rbp), %rax" << endl;
+
+        // if +, we perform loop 256-p[0] times
+        // if -, we perform full p[0] times
+        if (sign_of_loop == "-")
+            *output_file << "movq    (%rax), %rcx" << endl;
+
+        if (sign_of_loop == "+")
+        {
+            // input can't be more than 255 so we're good
+            *output_file << "movq    $256, %rcx " << endl;
+            *output_file << "subq    (%rax), %rcx  " << endl;
+        }
+
+        // if(sign_of_loop == "-")
+
         for (const auto &pair : simple_expr)
         {
-            
+            //  if(pair.first == 0)
+            //  continue;
+
             // pair.first = pointer offset
             // pair.second = cell +- change per loop
 
             // copy address of the first loop cell
-            *output_file << "movq   %rdx, %r12" << endl;
+            *output_file << "movq   %rax, %r12" << endl;
             // adjust pointer by our offset
             *output_file << "addq   $" << to_string(pair.first) << ", %r12" << endl;
             // set our constant change of cell
             *output_file << "movq    $" << to_string((pair.second)) << ", %r15" << endl;
             // constant multiplied by times loop happens
             *output_file << "imul   %rcx, %r15" << endl;
-            
-                        // //should zero out anything above the 8 bits, since we only care about byte
-                        // *output_file << "xor %ebx, %ebx "<<endl;
-                        // *output_file << "movb    (%r12), %bl" << endl;
-                        // *output_file << "movb    %bl, (%r12)" << endl;
 
-            //save result inside our cell
+            //*output_file << "and     $255 , %r15" << endl;
+
+            // take r15 % 255
+            // save result in a byte
+            // save result inside our cell
             *output_file << "addb    %r15b , (%r12)" << endl;
-    
-            
+
             print_padding();
             // here
         }
-        // our loop should always end in 0, this assures it, but would break intentional infinite loops
-        // *output_file << "movb    $0, (%rdx)" << endl;
-
-        ;
+        // our loop should always end in 0, this assures it, but would break
+        // intentional infinite loops ¯\_(ツ)_/¯, saves us like 5 instr per loop
+        //*output_file << "movb    $0, (%rax)" << endl;
     }
+
+    print_padding();
 
 } // end asm_string
 int main(int argc, char *argv[])
@@ -764,7 +830,7 @@ int main(int argc, char *argv[])
 
     asm_setup();
     print_padding();
-    bool opt = true;
+    bool opt = 1;
 
     if (opt)
     {
@@ -772,7 +838,6 @@ int main(int argc, char *argv[])
 
         // print program without non-instructions
         // print_string_vector(optimized_program);
-        //  cout << "Simple loops: " << endl;
         unordered_set<int> loop_indices = get_loop_indices(optimized_program);
 
         for (auto token : loop_indices)
@@ -781,13 +846,20 @@ int main(int argc, char *argv[])
 
             if (is_simple_loop(loop))
             {
-                 print_string_vector(loop);
-                optimized_program = optimize_simple_loop(token, loop, optimized_program);
+                int loop_increment = cell_net_change(loop);
+
+                if (abs(loop_increment) != 1)
+                {
+
+                    cout << "huh??? simple loop should only +- 1 each iteration!" << endl;
+                    print_string_vector(loop);
+                    assert(1 == 0);
+                }
+
+                // print_string_vector(loop);
+                optimized_program = optimize_simple_loop(token, loop_increment, loop, optimized_program);
 
                 // print_string_vector(optimized_program);
-                //    string test = "expr_simple:0:-1,1:7,2:10,3:3,4:1,";
-                //    map<int, int> output = expr_string_to_dict(test);
-                //    print_int_int_map(output);
             }
         }
 
