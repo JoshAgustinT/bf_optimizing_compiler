@@ -20,9 +20,14 @@ ofstream *output_file;
 int loop_num = -1;
 int seek_loop = -1;
 stack<int> myStack;
-int tape_size = 1000000;
+int tape_size = 1048576;
 
 bool optimize = false;
+
+void jasm(string text)
+{
+    *output_file << text << endl;
+}
 
 void bf_assembler(char token)
 {
@@ -177,6 +182,26 @@ void asm_setup()
 {
     // Assembly setup
     *output_file << ".file	\"bf compiler\"" << endl;
+
+    jasm(".section .data");
+    jasm(".p2align 5");
+    jasm(".LC0:");
+    // jasm(".quad   282578800083201");
+    // jasm(".quad   72340168543109377");
+    // jasm(".quad   72058697861365761");
+    // jasm(".quad   72340172821299457");
+
+    jasm(".quad   282578783371521");
+    jasm(".quad   282578783371521");
+    jasm(".quad   282578783371521");
+
+     jasm(".quad  282578783371521");
+
+
+           
+ 
+    
+    
     *output_file << ".text" << endl;
     *output_file << ".section	.text" << endl;
     *output_file << ".globl	main" << endl;
@@ -191,6 +216,7 @@ void asm_setup()
     *output_file << "subq	$16, %rsp" << endl;
     // Allocate 100,000 bytes with malloc
     *output_file << "movl	$" << to_string(tape_size) << ", %edi" << endl;
+    
     *output_file << "call	malloc@PLT" << endl;
     // Store the pointer returned by malloc in the local variable at -8(%rbp)
     *output_file << "movq	%rax, -8(%rbp)" << endl;
@@ -214,6 +240,14 @@ void asm_cleanup()
     // Return from the function
     *output_file << "ret" << endl;
     *output_file << endl;
+
+    
+        
+        
+        
+        
+
+    
 }
 /*
 Turn  vector<char> bf program to vector<string>, to support saving complex instructions
@@ -422,7 +456,7 @@ bool is_simple_loop(vector<string> loop_string)
 
 bool is_power_of_two(int n)
 {
-    
+
     return (n > 0) && ((n & (n - 1)) == 0);
 }
 /*
@@ -589,25 +623,25 @@ void print_padding()
                  << endl;
 }
 
-int get_expr_seek_offset(string expr){
-    int offset =0;
+int get_expr_seek_offset(string expr)
+{
+    int offset = 0;
     if (expr.compare(0, 10, "expr_seek:") == 0)
     {
         // Remove the prefix, plus the sign attached
         expr.erase(0, 10);
         offset = stoi(expr);
-        //cout<< offset<<endl;
-
-
+        // cout<< offset<<endl;
     }
-    else{
-        cout<< "erm u didnt pass in a expr_seek string... in get_expr_seek_offset()"<<endl;
-        assert(1==0);
-
+    else
+    {
+        cout << "erm u didnt pass in a expr_seek string... in get_expr_seek_offset()" << endl;
+        assert(1 == 0);
     }
 
     return offset;
 }
+
 
 void bf_assembler_string(string token)
 {
@@ -712,10 +746,9 @@ void bf_assembler_string(string token)
         loop_num++;
         myStack.push(loop_num);
 
-        string start_label = "start_loop_" +to_string(loop_num);
-        
-        string end_label = "end_loop_"+ to_string(loop_num);
-        
+        string start_label = "start_loop_" + to_string(loop_num);
+
+        string end_label = "end_loop_" + to_string(loop_num);
 
         // Load the pointer from -8(%rbp) into %rax
         *output_file << "movq    -8(%rbp), %rax" << endl;
@@ -726,14 +759,13 @@ void bf_assembler_string(string token)
         *output_file << "cmpb    $0, %cl" << endl;
         *output_file << "je      " << end_label << endl;
         *output_file << start_label << ":" << endl;
-
     }
     if (token == "]")
     {
         int match_loop = myStack.top();
         myStack.pop();
-        string start_label = "start_loop_"+to_string(match_loop);
-        string end_label = "end_loop_"+to_string(match_loop);
+        string start_label = "start_loop_" + to_string(match_loop);
+        string end_label = "end_loop_" + to_string(match_loop);
         // Load the pointer from -8(%rbp) into %rax
         *output_file << "movq    -8(%rbp), %rax" << endl;
 
@@ -744,14 +776,13 @@ void bf_assembler_string(string token)
         *output_file << "cmpb    $0, %cl" << endl;
         *output_file << "jne      " << start_label << endl;
         *output_file << end_label << ":" << endl;
-
     }
 
     if (startsWith(token, "expr_simple:"))
     {
 
         string sign_of_loop;
-        
+
         // if +, we perform loop 256-255 times
         // if -, we perform full p[0] times
         if (startsWith(token, "expr_simple:+"))
@@ -761,13 +792,11 @@ void bf_assembler_string(string token)
             sign_of_loop = "-";
 
         map<int, int> simple_expr = expr_string_to_dict(token);
-        //*output_file << "opt:" << endl;
 
         // 8 bit regists, AH AL BH BL CH CL DH DL
         // ch and bl work
         //  address when we begin the loop
         *output_file << "movq    -8(%rbp), %rax" << endl;
-
 
         if (sign_of_loop == "-")
             *output_file << "movq    (%rax), %rcx" << endl;
@@ -781,8 +810,8 @@ void bf_assembler_string(string token)
 
         for (const auto &pair : simple_expr)
         {
-             if(pair.first == 0)
-             continue;
+            if (pair.first == 0)
+                continue;
 
             // pair.first = pointer offset
             // pair.second = cell +- change per loop
@@ -797,83 +826,94 @@ void bf_assembler_string(string token)
             *output_file << "imul   %rcx, %r15" << endl;
 
             *output_file << "addb    %r15b , (%r12)" << endl;
-
         }
         // our loop should always end in 0, this assures it, but would break
         // intentional infinite loops ¯\_(ツ)_/¯, saves us like 5 instr per loop
         *output_file << "movb    $0, (%rax)" << endl;
     }
-    
-    if (startsWith(token, "expr_seek:")){
+
+    if (startsWith(token, "expr_seek:"))
+    {
+        print_padding();
+       
         int seek_offset = get_expr_seek_offset(token);
 
-        //cout<< seek_offset<<endl;
-        //loop start check
+       // cout<< seek_offset<<endl;
+   
         seek_loop++;
-        string start_label = "start_seek_loop_" +to_string(seek_loop);
-        string end_label = "end_seek_loop_"+ to_string(seek_loop);
+        string start_label = "start_seek_loop_" + to_string(seek_loop);
+        string end_label = "end_seek_loop_" + to_string(seek_loop);
 
+        //jasm("opt:");
         // Load the pointer from -8(%rbp) into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
-        // Load byte into %cl (lower 8 bits)
-        *output_file << "movb    (%rax), %cl" << endl;
-        // jump to matching end label if 0
-        *output_file << "cmpb    $0, %cl" << endl;
-        *output_file << "je      " << end_label << endl;
+        jasm("movq    -8(%rbp), %r8");
+        jasm( "movb    (%r8), %cl" );
+        jasm("cmpb    $0, %cl" );
 
-        *output_file << start_label << ":" << endl;
+        jasm( "je      " + end_label );
 
-                    // Load base address into %rax
-                    *output_file << "movq    -8(%rbp), %rax" << endl;
-                    // remove one from pointer address
-                    *output_file << "addq    $" <<to_string(seek_offset) <<", %rax" << endl;
-                    
-                    // Store the adjusted pointer back at -8(%rbp)
-                    *output_file << "movq    %rax, -8(%rbp)" << endl;
+        jasm("addq $1, %r8");
 
-        // Load the pointer from -8(%rbp) into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
-        // Load byte into %cl (lower 8 bits)
-        *output_file << "movb    (%rax), %cl" << endl;
-        // jump to matching end label if 0
-        *output_file << "cmpb    $0, %cl" << endl;
-        *output_file << "jne      " << start_label << endl;
+        jasm("subq    $32, %r8"); 
 
+        // Loop for checking bytes in chunks of 32
+        ////////////////////////////////////////////////////////////
+        jasm(start_label + ":");
+        jasm("addq    $32, %r8"); 
 
+        // .LC0:
+        //  .quad   72057594021216255
+        //  .quad   -1095216660481
+        //  .quad   -71776119061282561
+        //  .quad   4278190081
+
+        jasm("vmovdqa .LC0(%rip), %ymm0");
+        jasm("vpor    (%r8), %ymm0, %ymm0");
+        jasm("vpxor   %xmm1, %xmm1, %xmm1");
+        jasm("vpcmpeqb        %ymm1, %ymm0, %ymm0");
+        jasm("vpmovmskb       %ymm0, %eax");
+        jasm("testl   %eax, %eax");
+        jasm("je      " + start_label);
+        jasm("rep bsfl    %eax, %eax"); 
         
-        *output_file << end_label << ":" << endl;
+        /////////////////////////////////////////////////////////////////
+        // save offset
+        jasm("addq %rax, %r8");
+        jasm("movq    %r8, -8(%rbp)");
 
 
-    }//end seek
+        jasm(end_label + ":");
+        print_padding();
+
+    } // end seek
 } // end asm_string
 
-vector<string> optimize_seek_loop(int loop_index, int seek_offset, vector<string> loop, vector<string> program){
+vector<string> optimize_seek_loop(int loop_index, int seek_offset, vector<string> loop, vector<string> program)
+{
     string sb = "expr_seek:";
     for (int i = 0; i < loop.size(); i++)
     {
         program[loop_index + i] = " ";
     }
-    sb+= to_string(seek_offset);
+    sb += to_string(seek_offset);
 
     program[loop_index] = sb;
     return program;
-
 }
 int main(int argc, char *argv[])
 {
-    
 
     if (argc < 2)
     {
         cout << "No input file?" << endl;
         return 1;
     }
-    for(int i =0; i< argc; i++){
+    for (int i = 0; i < argc; i++)
+    {
         string args = argv[i];
 
-        if(args == "-o")
-        optimize = true;
-
+        if (args == "-o")
+            optimize = true;
     }
 
     // Open bf file
@@ -901,7 +941,6 @@ int main(int argc, char *argv[])
 
     asm_setup();
     print_padding();
-    
 
     if (optimize)
     {
@@ -936,15 +975,14 @@ int main(int argc, char *argv[])
             if (is_power_two_seek_loop(loop))
             {
                 int seek_offset = is_power_two_seek_loop(loop);
-                ///cout << seek_offset << endl;
-                //print_string_vector(loop);
-                
+                /// cout << seek_offset << endl;
+                // print_string_vector(loop);
+
                 optimized_program = optimize_seek_loop(token, seek_offset, loop, optimized_program);
             } // end is power two
 
         } // end looping over loop in program list
-                        //print_string_vector(optimized_program);
-
+          // print_string_vector(optimized_program);
 
         for (int i = 0; i < optimized_program.size(); i++)
         {
