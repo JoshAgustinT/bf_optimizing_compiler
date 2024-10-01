@@ -24,6 +24,9 @@ int tape_size = 1048576;
 
 bool optimize = false;
 
+/*
+jasm, short for josh asm :] outputs to output_file.
+*/
 void jasm(string text)
 {
     *output_file << text << endl;
@@ -184,18 +187,48 @@ void asm_setup()
     *output_file << ".file	\"bf compiler\"" << endl;
 
     jasm(".section .data");
+    //offset masks= 1,2,4,8,16
     jasm(".p2align 5");
-    jasm(".LC0:");
-    // jasm(".quad   282578800083201");
-    // jasm(".quad   72340168543109377");
-    // jasm(".quad   72058697861365761");
-    // jasm(".quad   72340172821299457");
+    jasm(".four_offset_mask:");
+    jasm(".quad   282578783371521");
+    jasm(".quad   282578783371521");
+    jasm(".quad   282578783371521");
+    jasm(".quad  282578783371521");
 
-    jasm(".quad   282578783371521");
-    jasm(".quad   282578783371521");
-    jasm(".quad   282578783371521");
+    jasm(".p2align 5");
+    jasm(".one_offset_mask:");
+    jasm(".quad   0");
+    jasm(".quad   0");
+    jasm(".quad   0");
+    jasm(".quad   0");
 
-     jasm(".quad  282578783371521");
+    jasm(".p2align 5");
+    jasm(".two_offset_mask:");
+    jasm(".quad   281479271743489");
+    jasm(".quad   281479271743489");
+    jasm(".quad   281479271743489");
+    jasm(".quad  281479271743489");
+
+    jasm(".p2align 5");
+    jasm(".eight_offset_mask:");
+    jasm(".quad   282578800148737");
+    jasm(".quad   282578800148737");
+    jasm(".quad   282578800148737");
+    jasm(".quad   282578800148737");
+
+    jasm(".p2align 5");
+    jasm(".sixteen_offset_mask:");
+    jasm(".quad   72340172838076673");
+    jasm(".quad   282578800148737");
+    jasm(".quad   72340172838076673");
+    jasm(".quad  282578800148737");
+
+    jasm(".p2align 5");
+    jasm(".thirty_two_offset_mask:");
+    jasm(".quad   72340172838076673");
+    jasm(".quad   72340172838076673");
+    jasm(".quad   72340172838076673");
+    jasm(".quad  282578800148737");
 
 
            
@@ -456,7 +489,6 @@ bool is_simple_loop(vector<string> loop_string)
 
 bool is_power_of_two(int n)
 {
-
     return (n > 0) && ((n & (n - 1)) == 0);
 }
 /*
@@ -838,44 +870,65 @@ void bf_assembler_string(string token)
        
         int seek_offset = get_expr_seek_offset(token);
 
-       // cout<< seek_offset<<endl;
+        //cout<< seek_offset<<endl;
    
         seek_loop++;
         string start_label = "start_seek_loop_" + to_string(seek_loop);
         string end_label = "end_seek_loop_" + to_string(seek_loop);
 
         //jasm("opt:");
-        // Load the pointer from -8(%rbp) into %rax
         jasm("movq    -8(%rbp), %r8");
-        jasm( "movb    (%r8), %cl" );
+        jasm("movb    (%r8), %cl" );
         jasm("cmpb    $0, %cl" );
 
         jasm( "je      " + end_label );
+        //this makes our offset masks easier
 
-        jasm("addq $1, %r8");
-
-        jasm("subq    $32, %r8"); 
+        if(seek_offset > 0){
+        jasm("addq $1, %r8"); 
+        jasm("subq    $32, %r8");
+        }
+        else{
+        jasm("subq $1, %r8"); 
+        jasm("addq    $32, %r8");
+        }
 
         // Loop for checking bytes in chunks of 32
         ////////////////////////////////////////////////////////////
         jasm(start_label + ":");
-        jasm("addq    $32, %r8"); 
 
-        // .LC0:
-        //  .quad   72057594021216255
-        //  .quad   -1095216660481
-        //  .quad   -71776119061282561
-        //  .quad   4278190081
+        if(seek_offset > 0)
+        jasm("addq    $32, %r8");
+        else
+        jasm("subq    $32, %r8"); // CHANGE IF neg i think
 
-        jasm("vmovdqa .LC0(%rip), %ymm0");
+        
+        if(abs(seek_offset) == 4)
+        jasm("vmovdqa .four_offset_mask(%rip), %ymm0");
+        if(abs(seek_offset) == 1)
+        jasm("vmovdqa .one_offset_mask(%rip), %ymm0");
+        if(abs(seek_offset) == 2)
+        jasm("vmovdqa .two_offset_mask(%rip), %ymm0");
+        if(abs(seek_offset) == 8)
+        jasm("vmovdqa .eight_offset_mask(%rip), %ymm0");
+        if(abs(seek_offset) == 16)
+        jasm("vmovdqa .sixteen_offset_mask(%rip), %ymm0");
+        if(abs(seek_offset) == 32)
+        jasm("vmovdqa .thirty_two_offset_mask(%rip), %ymm0");
+
         jasm("vpor    (%r8), %ymm0, %ymm0");
         jasm("vpxor   %xmm1, %xmm1, %xmm1");
         jasm("vpcmpeqb        %ymm1, %ymm0, %ymm0");
         jasm("vpmovmskb       %ymm0, %eax");
         jasm("testl   %eax, %eax");
         jasm("je      " + start_label);
-        jasm("rep bsfl    %eax, %eax"); 
-        
+
+        if(seek_offset > 0)
+        jasm("rep bsfl    %eax, %eax");  // CHANGE IF neg i think
+        else{
+            jasm("rep bsrl    %eax, %eax");
+            jasm("subq %32, %rax");
+        }
         /////////////////////////////////////////////////////////////////
         // save offset
         jasm("addq %rax, %r8");
@@ -977,7 +1030,7 @@ int main(int argc, char *argv[])
                 int seek_offset = is_power_two_seek_loop(loop);
                 /// cout << seek_offset << endl;
                 // print_string_vector(loop);
-
+                if(abs(seek_offset) <= 32) // my machine only supports 256bit vectors
                 optimized_program = optimize_seek_loop(token, seek_offset, loop, optimized_program);
             } // end is power two
 
