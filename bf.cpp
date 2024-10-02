@@ -23,7 +23,7 @@ stack<int> myStack;
 int tape_size = 1048576;
 
 bool simple_loop_flag = false;
-bool vector_flag = false;
+bool seek_flag = false;
 bool optimization_flag = false;
 string bf_file_name = "";
 
@@ -199,7 +199,7 @@ void asm_setup()
 
     jasm(".section .data");
 
-    if (optimization_flag || vector_flag)
+    if (optimization_flag || seek_flag)
     {
         // offset masks= 1,2,4,8,16
         jasm(".p2align 5");
@@ -491,10 +491,28 @@ bool is_simple_loop(vector<string> loop_string)
 
 bool is_power_of_two(int n)
 {
-    return (n > 0) && ((n & (n - 1)) == 0);
+    bool answer = false;
+    switch (n)
+    {
+    case -32:
+    case -16:
+    case -8:
+    case -4:
+    case -2:
+    case 2:
+    case 4:
+    case 16:
+    case 32:
+        answer = true;
+        break;
+    default:
+        break;
+    }
+
+    return answer;
 }
 /*
-Checks if input loop is a seek loop
+Checks if input loop is a power of 2 seek loop
 */
 int is_power_two_seek_loop(vector<string> loop_string)
 {
@@ -518,6 +536,33 @@ int is_power_two_seek_loop(vector<string> loop_string)
 
     if (!is_power_of_two(offset))
         return false;
+    // basically only true if we only have one type of seek
+    return offset;
+}
+
+/*
+Checks if input loop is a seek loop
+*/
+int is_seek_loop(vector<string> loop_string)
+{
+    int offset = 0;
+    // iterate over body of loop ie -> [...]
+    for (int i = 1; i < loop_string.size() - 1; i++)
+    {
+        string token = loop_string[i];
+
+        if (token != ">" && token != "<")
+        {
+            return false;
+        }
+        if (token == ">")
+            offset++;
+
+        if (token == "<")
+            offset--;
+
+    } // end for loop
+
     // basically only true if we only have one type of seek
     return offset;
 }
@@ -846,76 +891,112 @@ void bf_string_assembler(string token)
 
         int seek_offset = get_expr_seek_offset(token);
 
-        // cout<< seek_offset<<endl;
-
-        seek_loop++;
-        string start_label = "start_seek_loop_" + to_string(seek_loop);
-        string end_label = "end_seek_loop_" + to_string(seek_loop);
-
-        // jasm("opt:");
-
-        jasm("movb    (%r13), %cl");
-        jasm("cmpb    $0, %cl");
-
-        jasm("je      " + end_label);
-
-        // this makes our offset masks easier to reason about (i like seeing 32)
-        // subtracting 32, so our loop can always add 32, and on first iterations will be 0.
-
-        if (seek_offset > 0)
+        if (is_power_of_two(seek_offset))
         {
-            jasm("addq $1, %r13");
-            jasm("subq    $32, %r13");
+            //cout<< seek_offset<<endl;
+
+            seek_loop++;
+            string start_label = "start_seek_loop_" + to_string(seek_loop);
+            string end_label = "end_seek_loop_" + to_string(seek_loop);
+
+            // jasm("opt:");
+
+            jasm("movb    (%r13), %cl");
+            jasm("cmpb    $0, %cl");
+
+            jasm("je      " + end_label);
+
+            // this makes our offset masks easier to reason about (i like seeing 32)
+            // subtracting 32, so our loop can always add 32, and on first iterations will be 0.
+
+            if (seek_offset > 0)
+            {
+                jasm("addq $1, %r13");
+                jasm("subq    $32, %r13");
+            }
+            else
+            {
+                //same alignment reason, but we don't need to offset our first loop since we want to read the previous bytes 
+                jasm("addq $1, %r13");
+                // jasm("addq    $32, %r13");
+            }
+
+            // Loop for checking bytes in chunks of 32
+            ////////////////////////////////////////////////////////////
+            jasm(start_label + ":");
+
+            if (seek_offset > 0)
+                jasm("addq    $32, %r13");
+            else
+                jasm("subq    $32, %r13"); // CHANGE IF neg i think
+
+            if (abs(seek_offset) == 4)
+                jasm("vmovdqa .four_offset_mask(%rip), %ymm0");
+            if (abs(seek_offset) == 1)
+                jasm("vmovdqa .one_offset_mask(%rip), %ymm0");
+            if (abs(seek_offset) == 2)
+                jasm("vmovdqa .two_offset_mask(%rip), %ymm0");
+            if (abs(seek_offset) == 8)
+                jasm("vmovdqa .eight_offset_mask(%rip), %ymm0");
+            if (abs(seek_offset) == 16)
+                jasm("vmovdqa .sixteen_offset_mask(%rip), %ymm0");
+            if (abs(seek_offset) == 32)
+                jasm("vmovdqa .thirty_two_offset_mask(%rip), %ymm0");
+
+            jasm("vpor    (%r13), %ymm0, %ymm0");
+            jasm("vpxor   %xmm1, %xmm1, %xmm1");
+            jasm("vpcmpeqb        %ymm1, %ymm0, %ymm0");
+            jasm("vpmovmskb       %ymm0, %eax");
+            jasm("testl   %eax, %eax");
+            jasm("je      " + start_label);
+
+            if (seek_offset > 0)
+            {
+                jasm("bsfl    %eax, %eax"); // CHANGE IF neg i think
+                jasm("addq %rax, %r13");
+            }
+
+            else
+            {
+                jasm("bsrl    %eax, %eax");
+                jasm("addq %rax, %r13");
+
+            }
+
+            /////////////////////////////////////////////////////////////////
+            // save offset
+
+            jasm(end_label + ":");
+            print_padding();
         }
+
+        // all other seek loops
         else
         {
-            jasm("subq $1, %r13");
-            jasm("addq    $32, %r13");
+            seek_loop++;
+            string start_label = "start_seek_loop_" + to_string(seek_loop);
+            string end_label = "end_seek_loop_" + to_string(seek_loop);
+
+            // jasm("opt:");
+            //  Load byte into %cl (lower 8 bits)
+            jasm("movb    (%r13), %cl");
+            // jump to matching end label if 0
+            jasm("cmpb    $0, %cl");
+            jasm("je      " + end_label);
+
+            jasm(start_label + ":");
+
+            // remove one from pointer address
+            jasm("addq    $" + to_string(seek_offset) + ", %r13");
+
+            // Load byte into %cl (lower 8 bits)
+            jasm("movb    (%r13), %cl");
+            // jump to matching end label if 0
+            jasm("cmpb    $0, %cl");
+            jasm("jne      " + start_label);
+
+            jasm(end_label + ":");
         }
-
-        // Loop for checking bytes in chunks of 32
-        ////////////////////////////////////////////////////////////
-        jasm(start_label + ":");
-
-        if (seek_offset > 0)
-            jasm("addq    $32, %r13");
-        else
-            jasm("subq    $32, %r13"); // CHANGE IF neg i think
-
-        if (abs(seek_offset) == 4)
-            jasm("vmovdqa .four_offset_mask(%rip), %ymm0");
-        if (abs(seek_offset) == 1)
-            jasm("vmovdqa .one_offset_mask(%rip), %ymm0");
-        if (abs(seek_offset) == 2)
-            jasm("vmovdqa .two_offset_mask(%rip), %ymm0");
-        if (abs(seek_offset) == 8)
-            jasm("vmovdqa .eight_offset_mask(%rip), %ymm0");
-        if (abs(seek_offset) == 16)
-            jasm("vmovdqa .sixteen_offset_mask(%rip), %ymm0");
-        if (abs(seek_offset) == 32)
-            jasm("vmovdqa .thirty_two_offset_mask(%rip), %ymm0");
-
-        jasm("vpor    (%r13), %ymm0, %ymm0");
-        jasm("vpxor   %xmm1, %xmm1, %xmm1");
-        jasm("vpcmpeqb        %ymm1, %ymm0, %ymm0");
-        jasm("vpmovmskb       %ymm0, %eax");
-        jasm("testl   %eax, %eax");
-        jasm("je      " + start_label);
-
-        if (seek_offset > 0)
-            jasm("bsfl    %eax, %eax"); // CHANGE IF neg i think
-        else
-        {
-            jasm("bsrl    %eax, %eax");
-            jasm("subq %32, %rax");
-        }
-        /////////////////////////////////////////////////////////////////
-        // save offset
-        jasm("addq %rax, %r13");
-
-        jasm(end_label + ":");
-        print_padding();
-
     } // end seek
 } // end asm_string
 
@@ -947,7 +1028,7 @@ int main(int argc, char *argv[])
         if (args == "-O")
             simple_loop_flag = true;
         if (args == "-v")
-            vector_flag = true;
+            seek_flag = true;
         if (args == "-O1")
             optimization_flag = true;
         if (args.find(".b") != std::string::npos)
@@ -985,7 +1066,7 @@ int main(int argc, char *argv[])
     */
     asm_setup();
 
-    if (simple_loop_flag || vector_flag || optimization_flag)
+    if (simple_loop_flag || seek_flag || optimization_flag)
     {
         vector<string> optimized_program = init_optimized_program_list(program_file);
 
@@ -1015,15 +1096,16 @@ int main(int argc, char *argv[])
                 // print_string_vector(optimized_program);
             } // end is simple loop
 
-            if (is_power_two_seek_loop(loop))
+            if (is_seek_loop(loop))
             {
-                int seek_offset = is_power_two_seek_loop(loop);
-                /// cout << seek_offset );
-                // print_string_vector(loop);
-                if (abs(seek_offset) <= 32) // my machine only supports 256bit vectors
+                int seek_offset = is_seek_loop(loop);
+                // /// cout << seek_offset );
+                // // print_string_vector(loop);
 
-                    if (vector_flag || optimization_flag)
-                        optimized_program = optimize_seek_loop(token, seek_offset, loop, optimized_program);
+                // if (abs(seek_offset) <= 32) // my machine only supports 256bit vectors
+
+                if (seek_flag || optimization_flag)
+                    optimized_program = optimize_seek_loop(token, seek_offset, loop, optimized_program);
             } // end is power two
 
         } // end looping over loop in program list
@@ -1038,7 +1120,7 @@ int main(int argc, char *argv[])
         // print_string_vector(optimized_program);
     }
 
-    if (!optimization_flag && !vector_flag && !simple_loop_flag)
+    if (!optimization_flag && !seek_flag && !simple_loop_flag)
     {
         // // begin our program compiler loop
         for (int i = 0; i < program_file.size(); i++)
