@@ -3,7 +3,7 @@ by Joshua Tlatelpa-Agustin
 10-01-24
 ######  Github link of project:
 https://github.com/JoshAgustinT/bf_optimizing_compiler
-*bfcheck*: 0 failures, 1753 successes
+
 ---
 
 
