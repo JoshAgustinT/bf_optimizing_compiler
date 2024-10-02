@@ -17,8 +17,6 @@ https://github.com/JoshAgustinT/bf_optimizing_compiler
 
 Seek loop
 1. Loops that contain only < and > commands
-2. Net change inside the loop is a power of 2 and their negative counterpart
-3. Ie only net changes of {-32,-16, -8, -4, -2, 2, 4, 8, 16, 32}
 
 ---
 ##### Assembly Examples at bottom of page.
@@ -27,56 +25,56 @@ Seek loop
 #####  Improvements Possible
 
 Simple loops
-> My current definition of a simple loop is that it doesn't contain any simplified loops within. However, simplified simple loops should be able to work. Dr. Regerh mentioned saving the contents of the cell at the beginning of a simple loop at a specified offset and keeping track of it. This way we could essentially merge simple loops that contain simplified simple loops inside with some algebra. Currently, my implementation does something like simple_expr = loop_size*(0:1,1:-2), where the first element is the offset from the original loop cell and the second element is what they do to the cell in each iteration. If we save the loop_size and find the offset between the two loop control cells it should allow us to merge the simple expr's and reach a fixed point. The implementation should be relatively straightforward since we're guaranteed to have 0 net pointer movement and only +-1 to our loop cell.
+> My current definition of a simple loop is that it doesn't contain any simplified loops within. However, simplified simple loops should be able to work. Dr. Regerh mentioned saving the contents of the cell at the beginning of a simple loop at a specified offset and keeping track of it. This way we could essentially merge simple loops that contain simplified simple loops inside with some algebra. Currently, my implementation does something like simple_expr = loop_size*(0:1,1:-2), where the first element is the offset from the original loop cell and the second element is what they do to the cell in each iteration. If we save the loop_size and find the offset between the two loop control cells it should allow us to merge the simple expr's and reach a fixed point. The implementation should be relatively straightforward (as straightforward as writing an algorithm in asm can be) since we're guaranteed to have 0 net pointer movement and only +-1 to our loop cell.
 
-Seek loops
-> My optimization currently supports seek loops with offsets of {-32, -16, -8, -4, -2, 2, 4, 8, 16, 32}. Since my machine only handles vectors up to 32 bytes, and machines with larger capacities are relatively rare, using vectors for larger offsets isn’t practical. With larger sizes, we would end up checking only one byte in the vector, which means we could simply use regular registers instead. Previously, I had a non-vector optimization that calculated the offset of a seek loop and added it directly to our tape address. This approach could replace seek loops outside our defined set. It would also allow us to extend our definition of a seek loop to include any loop that uses only the > and < operators. Implementing this change would be straightforward. It would function as a default method, and we'd use vector instructions only for the specific offsets of {-32, -16, -8, -4, -2, 2, 4, 8, 16, 32}.
+Seek loops (done)
+> My optimization currently supports seek loops with offsets of {-32, -16, -8, -4, -2, 2, 4, 8, 16, 32} for alignment purposes. Also since my machine only handles vectors up to 32 bytes, and machines with larger capacities are relatively rare, using other sizes isn't practical. With larger sized chunks to check, we would end up checking only one byte in the vector, which means we could simply use regular registers instead. Previously, I had a non-vector optimization that calculated the offset of a seek loop and added it directly to our tape address. This approach could replace seek loops outside our defined set. It would also allow us to extend our definition of a seek loop to include any loop that uses only the > and < operators. Implementing this change would be straightforward. It would function as a default method, and we'd use vector instructions only for the specific offsets of {-32, -16, -8, -4, -2, 2, 4, 8, 16, 32}.
 
-Extra
+Extra (done)
 > There is also still plenty of redundancy that can be removed, such as not reloading the tape location on every instruction. This alone nearly tripled the speed on some tests while I was testing it, but it was unstable. Need to switch around some major things for this to work, but the speed is in exchange for simplicity in this case.
 ---
 #####  Benchmarks on Intel Ultra 9 185H, (14th gen mobile chip)
-Running all test programs in *benches* folder.
+Compiling, linking, and running all test programs in *benches* folder.
 
-* with no loop optimizations
+* no optimizations
 ```
-real    0m16.385s
-user    0m15.677s
-sys     0m0.305s
+real    0m15.855s
+user    0m15.247s
+sys     0m0.292s
 ```
 * optimizing only simple loops
 ```
-real    0m9.698s
-user    0m9.104s
-sys     0m0.224s
+real    0m5.708s
+user    0m5.218s
+sys     0m0.135s
 ```
-* optimizing only memory scans
+* optimizing only seek loops
 ```
-real    0m15.398s
-user    0m14.778s
-sys     0m0.275s
+real    0m8.959s
+user    0m8.385s
+sys     0m0.219s
 ```
-* optimizing both simple loops and memory scans
+* optimizing both simple and seek loops
 ```
-real    0m9.560s
-user    0m9.045s
-sys     0m0.140s
+real    0m5.619s
+user    0m5.143s
+sys     0m0.122s
 ```
 
 
 --
-My favorite test: hanoi.b
+Since the prior test takes into account building time here's a test of only the executable using: mandel.b
 
 * No optimizations
 ```
-real    0m3.178s
-user    0m3.158s
-sys     0m0.020s
+real    0m5.907s
+user    0m5.901s
+sys     0m0.001s
 ```
 * All optimizations
 ```
-real    0m0.733s
-user    0m0.725s
+real    0m0.880s
+user    0m0.879s
 sys     0m0.000s
 ```
 
@@ -85,7 +83,7 @@ sys     0m0.000s
 #####  To output x86 assembly:
 * Build Compiler
     > g++ bf.cpp
-* First argument will be treated as source bf program and output x86 assembly
+* Argument ending with '.b' will be treated as source bf program and output x86 assembly
     > ./a.out file.b
 * Link our new 'bf.s' assembly file
     > gcc bf.s
@@ -94,11 +92,11 @@ sys     0m0.000s
 ---
 #####  Using optimizations
 * Simple Loop Elimination
-    >  add a "-O" AFTER first argument to eliminate simple loops.
+    >  add a '-O' in arguments to eliminate simple loops.
 * Seek loop vector optimization
-    >  add a "-v" AFTER first argument to optimize seek loops with vector instructions.
-      alternatively, add "-O1" AFTER first argument to do both optimizations.
-* Not using any flags will use default naive implementation.
+    >  add a '-v' in argument to optimize seek loops with vector instructions and value replacement.
+      alternatively, do '-O1' instead to do both optimizations.
+* Not using any flags will use default naive implementation, which is kept naive for easier debugging.
 
 ---
 #####  Bf programs
