@@ -25,6 +25,7 @@ int tape_size = 1048576;
 bool simple_loop_flag = false;
 bool vector_flag = false;
 bool optimization_flag = false;
+string bf_file_name = "";
 
 /*
 jasm, short for josh asm :] outputs to output_file.
@@ -34,6 +35,11 @@ void jasm(string text)
     *output_file << text << endl;
 }
 
+void print_padding()
+{
+    *output_file << endl;
+}
+
 void bf_assembler(char token)
 {
 
@@ -41,87 +47,87 @@ void bf_assembler(char token)
     {
     case '>':
         // Load base address into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
         // add one to pointer address
-        *output_file << "addq    $1, %rax" << endl;
+        jasm("addq    $1, %rax");
         // Store the adjusted pointer back at -8(%rbp)
-        *output_file << "movq    %rax, -8(%rbp)" << endl;
+        jasm("movq    %rax, -8(%rbp)");
         // tape_position++;
         break;
     case '<':
 
         // Load base address into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
         // remove one from pointer address
-        *output_file << "subq    $1, %rax" << endl;
+        jasm("subq    $1, %rax");
         // Store the adjusted pointer back at -8(%rbp)
-        *output_file << "movq    %rax, -8(%rbp)" << endl;
+        jasm("movq    %rax, -8(%rbp)");
         // tape_position--;
         break;
     case '+':
 
         // Load base address into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
         // Load byte into %cl (lower 8 bits)
-        *output_file << "movb    (%rax), %cl" << endl;
+        jasm("movb    (%rax), %cl");
 
         // Add 1 to the byte
-        *output_file << "addb    $1, %cl" << endl;
+        jasm("addb    $1, %cl");
 
         // Store the modified byte back to the address in %rax
-        *output_file << "movb    %cl, (%rax)" << endl;
+        jasm("movb    %cl, (%rax)");
 
         // tape[tape_position] += 1;
         break;
     case '-':
 
         // Load the pointer from -8(%rbp) into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
 
         // Load byte into %cl (lower 8 bits)
-        *output_file << "movb    (%rax), %cl" << endl;
+        jasm("movb    (%rax), %cl");
 
         // Decrrement byte in %cl
-        *output_file << "subb    $1, %cl" << endl;
+        jasm("subb    $1, %cl");
 
         // Store the modified byte back to the address in %rax
-        *output_file << "movb    %cl, (%rax)" << endl;
+        jasm("movb    %cl, (%rax)");
 
         // tape[tape_position] -= 1;
         break;
     case '.':
 
         // Load the pointer from -8(%rbp) into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
 
         // Load the byte from the address into %al (to use with putc)
-        *output_file << "movb    (%rax), %al" << endl;
+        jasm("movb    (%rax), %al");
 
         // Prepare for putc
         // Load file descriptor for stdout into %rsi
-        *output_file << "movq    stdout(%rip), %rsi" << endl;
+        jasm("movq    stdout(%rip), %rsi");
         // Move and sign-extend byte in %al to %edi
-        *output_file << "movsbl  %al, %edi" << endl;
+        jasm("movsbl  %al, %edi");
 
         // Call putc to print the character
-        *output_file << "call    putc@PLT" << endl;
+        jasm("call    putc@PLT");
 
         // cout << tape[tape_position];
         break;
     case ',':
 
         // Move the file pointer for stdin into the %rdi register
-        *output_file << "movq    stdin(%rip), %rdi" << endl;
+        jasm("movq    stdin(%rip), %rdi");
 
         // Call the getc function to read a character from stdin (returned in %al)
-        *output_file << "call    getc@PLT" << endl;
+        jasm("call    getc@PLT");
         // Move the byte from %al into %bl
-        *output_file << "movb    %al, %bl" << endl;
+        jasm("movb    %al, %bl");
         // Load the pointer from -8(%rbp) into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
 
         // Store the byte from %bl into the memory pointed to by %rax
-        *output_file << "movb    %bl, (%rax)" << endl;
+        jasm("movb    %bl, (%rax)");
 
         // char nextByte;
         // cin.get(nextByte);
@@ -137,15 +143,15 @@ void bf_assembler(char token)
         string end_label = "end_loop_";
         end_label += to_string(loop_num);
 
-        *output_file << start_label << ":" << endl;
+        jasm(start_label + ":");
         // Load the pointer from -8(%rbp) into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
 
         // Load byte into %cl (lower 8 bits)
-        *output_file << "movb    (%rax), %cl" << endl;
+        jasm("movb    (%rax), %cl");
         // jump to matching end label if 0
-        *output_file << "cmpb    $0, %cl" << endl;
-        *output_file << "je      " << end_label << endl;
+        jasm("cmpb    $0, %cl");
+        jasm("je      " + end_label);
     }
 
     break;
@@ -159,16 +165,16 @@ void bf_assembler(char token)
         string end_label = "end_loop_";
         end_label += to_string(match_loop);
 
-        *output_file << end_label << ":" << endl;
+        jasm(end_label + ":");
         // Load the pointer from -8(%rbp) into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
 
         // Load byte into %cl (lower 8 bits)
-        *output_file << "movb    (%rax), %cl" << endl;
+        jasm("movb    (%rax), %cl");
 
         // jump to matching start label if not 0
-        *output_file << "cmpb    $0, %cl" << endl;
-        *output_file << "jne      " << start_label << endl;
+        jasm("cmpb    $0, %cl");
+        jasm("jne      " + start_label);
     }
 
     break;
@@ -186,105 +192,94 @@ bool startsWith(const std::string &str, const std::string &prefix)
 void asm_setup()
 {
     // Assembly setup
-    *output_file << ".file	\"bf compiler\"" << endl;
+    jasm(".file	\"bf compiler\"");
 
     jasm(".section .data");
 
-    if(optimization_flag || vector_flag){
-    //offset masks= 1,2,4,8,16
-    jasm(".p2align 5");
-    jasm(".four_offset_mask:");
-    jasm(".quad   282578783371521");
-    jasm(".quad   282578783371521");
-    jasm(".quad   282578783371521");
-    jasm(".quad  282578783371521");
+    if (optimization_flag || vector_flag)
+    {
+        // offset masks= 1,2,4,8,16
+        jasm(".p2align 5");
+        jasm(".four_offset_mask:");
+        jasm(".quad   282578783371521");
+        jasm(".quad   282578783371521");
+        jasm(".quad   282578783371521");
+        jasm(".quad  282578783371521");
 
-    jasm(".p2align 5");
-    jasm(".one_offset_mask:");
-    jasm(".quad   0");
-    jasm(".quad   0");
-    jasm(".quad   0");
-    jasm(".quad   0");
+        jasm(".p2align 5");
+        jasm(".one_offset_mask:");
+        jasm(".quad   0");
+        jasm(".quad   0");
+        jasm(".quad   0");
+        jasm(".quad   0");
 
-    jasm(".p2align 5");
-    jasm(".two_offset_mask:");
-    jasm(".quad   281479271743489");
-    jasm(".quad   281479271743489");
-    jasm(".quad   281479271743489");
-    jasm(".quad  281479271743489");
+        jasm(".p2align 5");
+        jasm(".two_offset_mask:");
+        jasm(".quad   281479271743489");
+        jasm(".quad   281479271743489");
+        jasm(".quad   281479271743489");
+        jasm(".quad  281479271743489");
 
-    jasm(".p2align 5");
-    jasm(".eight_offset_mask:");
-    jasm(".quad   282578800148737");
-    jasm(".quad   282578800148737");
-    jasm(".quad   282578800148737");
-    jasm(".quad   282578800148737");
+        jasm(".p2align 5");
+        jasm(".eight_offset_mask:");
+        jasm(".quad   282578800148737");
+        jasm(".quad   282578800148737");
+        jasm(".quad   282578800148737");
+        jasm(".quad   282578800148737");
 
-    jasm(".p2align 5");
-    jasm(".sixteen_offset_mask:");
-    jasm(".quad   72340172838076673");
-    jasm(".quad   282578800148737");
-    jasm(".quad   72340172838076673");
-    jasm(".quad  282578800148737");
+        jasm(".p2align 5");
+        jasm(".sixteen_offset_mask:");
+        jasm(".quad   72340172838076673");
+        jasm(".quad   282578800148737");
+        jasm(".quad   72340172838076673");
+        jasm(".quad  282578800148737");
 
-    jasm(".p2align 5");
-    jasm(".thirty_two_offset_mask:");
-    jasm(".quad   72340172838076673");
-    jasm(".quad   72340172838076673");
-    jasm(".quad   72340172838076673");
-    jasm(".quad  282578800148737");
-
-
+        jasm(".p2align 5");
+        jasm(".thirty_two_offset_mask:");
+        jasm(".quad   72340172838076673");
+        jasm(".quad   72340172838076673");
+        jasm(".quad   72340172838076673");
+        jasm(".quad  282578800148737");
     }
- 
-    
-    
-    *output_file << ".text" << endl;
-    *output_file << ".section	.text" << endl;
-    *output_file << ".globl	main" << endl;
-    *output_file << ".type	main, @function" << endl;
-    *output_file << endl;
 
-    *output_file << "main:" << endl;
+    jasm(".text");
+    jasm(".section	.text");
+    jasm(".globl	main");
+    jasm(".type	main, @function");
+    print_padding();
 
-    *output_file << "pushq	%rbp" << endl;
-    *output_file << "movq	%rsp, %rbp" << endl;
+    jasm("main:");
+
+    jasm("pushq	%rbp");
+    jasm("movq	%rsp, %rbp");
     // Allocate 16 bytes of stack space for local variables
-    *output_file << "subq	$16, %rsp" << endl;
+    jasm("subq	$16, %rsp");
     // Allocate 100,000 bytes with malloc
-    *output_file << "movl	$" << to_string(tape_size) << ", %edi" << endl;
-    
-    *output_file << "call	malloc@PLT" << endl;
+    jasm("movl	$" + to_string(tape_size) + ", %edi");
+
+    jasm("call	malloc@PLT");
     // Store the pointer returned by malloc in the local variable at -8(%rbp)
-    *output_file << "movq	%rax, -8(%rbp)" << endl;
+    jasm("movq	%rax, -8(%rbp)");
 
     // Calculate the address 50,000 bytes into the allocated memory
-    *output_file << "movq    -8(%rbp), %rax" << endl;                            // Load base address into %rax
-    *output_file << "addq    $" << to_string(tape_size / 2) << ", %rax" << endl; // Add the offset to %rax
+    jasm("movq    -8(%rbp), %rax");                          // Load base address into %rax
+    jasm("addq    $" + to_string(tape_size / 2) + ", %rax"); // Add the offset to %rax
 
     // Store the adjusted pointer back at -8(%rbp)
-    *output_file << "movq    %rax, -8(%rbp)" << endl;
+    jasm("movq    %rax, -8(%rbp)");
 }
 
 void asm_cleanup()
 {
     // Set the return value to 0 (successful completion)
-    *output_file << "movl    $0, %eax" << endl;
+    jasm("movl    $0, %eax");
     // Proper stack cleanup
-    *output_file << "movq    %rbp, %rsp" << endl;
+    jasm("movq    %rbp, %rsp");
     // Restore the old base pointer
-    *output_file << "popq    %rbp" << endl;
+    jasm("popq    %rbp");
     // Return from the function
-    *output_file << "ret" << endl;
-    *output_file << endl;
-
-    
-        
-        
-        
-        
-
-    
+    jasm("ret");
+    print_padding();
 }
 /*
 Turn  vector<char> bf program to vector<string>, to support saving complex instructions
@@ -378,7 +373,7 @@ vector<string> get_loop_string(int j, vector<string> list)
         return return_list;
     }
 
-    cout << "couldn't find '[' in get_loop_string(), wrong index?? ";
+    cout << "couldn't find '[' in get_loop_string(), wrong index?? " << endl;
     return return_list;
 }
 
@@ -620,7 +615,7 @@ map<int, int> expr_string_to_dict(string expr)
     {
         // Remove the prefix, plus the sign attached
         expr.erase(0, 13);
-        // cout << expr << endl;
+        // cout << expr );
         //  example- 0:-1,1:7,2:10,3:3,4:1,
         std::string first, second;
 
@@ -653,12 +648,6 @@ map<int, int> expr_string_to_dict(string expr)
     return dict;
 }
 
-void print_padding()
-{
-    *output_file << endl
-                 << endl;
-}
-
 int get_expr_seek_offset(string expr)
 {
     int offset = 0;
@@ -678,7 +667,6 @@ int get_expr_seek_offset(string expr)
     return offset;
 }
 
-
 void bf_assembler_string(string token)
 {
     // print_padding();
@@ -686,36 +674,36 @@ void bf_assembler_string(string token)
     if (token == ">")
     {
         // Load base address into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
         // add one to pointer address
-        *output_file << "addq    $1, %rax" << endl;
+        jasm("addq    $1, %rax");
         // Store the adjusted pointer back at -8(%rbp)
-        *output_file << "movq    %rax, -8(%rbp)" << endl;
+        jasm("movq    %rax, -8(%rbp)");
         // tape_position++;
     }
     if (token == "<")
     {
 
         // Load base address into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
         // remove one from pointer address
-        *output_file << "addq    $-1, %rax" << endl;
+        jasm("addq    $-1, %rax");
         // Store the adjusted pointer back at -8(%rbp)
-        *output_file << "movq    %rax, -8(%rbp)" << endl;
+        jasm("movq    %rax, -8(%rbp)");
         // tape_position--;
     }
     if (token == "+")
     {
         // Load base address into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
         // Load byte into %cl (lower 8 bits)
-        *output_file << "movb    (%rax), %cl" << endl;
+        jasm("movb    (%rax), %cl");
 
         // Add 1 to the byte
-        *output_file << "addb    $1, %cl" << endl;
+        jasm("addb    $1, %cl");
 
         // Store the modified byte back to the address in %rax
-        *output_file << "movb    %cl, (%rax)" << endl;
+        jasm("movb    %cl, (%rax)");
 
         // tape[tape_position] += 1;
     }
@@ -723,16 +711,16 @@ void bf_assembler_string(string token)
     {
 
         // Load the pointer from -8(%rbp) into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
 
         // Load byte into %cl (lower 8 bits)
-        *output_file << "movb    (%rax), %cl" << endl;
+        jasm("movb    (%rax), %cl");
 
         // Decrrement byte in %cl
-        *output_file << "subb    $1, %cl" << endl;
+        jasm("subb    $1, %cl");
 
         // Store the modified byte back to the address in %rax
-        *output_file << "movb    %cl, (%rax)" << endl;
+        jasm("movb    %cl, (%rax)");
 
         // tape[tape_position] -= 1;
     }
@@ -740,19 +728,19 @@ void bf_assembler_string(string token)
     {
 
         // Load the pointer from -8(%rbp) into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
 
         // Load the byte from the address into %al (to use with putc)
-        *output_file << "movb    (%rax), %al" << endl;
+        jasm("movb    (%rax), %al");
 
         // Prepare for putc
         // Load file descriptor for stdout into %rsi
-        *output_file << "movq    stdout(%rip), %rsi" << endl;
+        jasm("movq    stdout(%rip), %rsi");
         // Move and sign-extend byte in %al to %edi
-        *output_file << "movsbl  %al, %edi" << endl;
+        jasm("movsbl  %al, %edi");
 
         // Call putc to print the character
-        *output_file << "call    putc@PLT" << endl;
+        jasm("call    putc@PLT");
 
         // cout << tape[tape_position];
     }
@@ -760,26 +748,24 @@ void bf_assembler_string(string token)
     {
 
         // Move the file pointer for stdin into the %rdi register
-        *output_file << "movq    stdin(%rip), %rdi" << endl;
+        jasm("movq    stdin(%rip), %rdi");
 
         // Call the getc function to read a character from stdin (returned in %al)
-        *output_file << "call    getc@PLT" << endl;
+        jasm("call    getc@PLT");
         // Move the byte from %al into %bl
-        *output_file << "movb    %al, %bl" << endl;
+        jasm("movb    %al, %bl");
         // Load the pointer from -8(%rbp) into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
 
         // Store the byte from %bl into the memory pointed to by %rax
-        *output_file << "movb    %bl, (%rax)" << endl;
+        jasm("movb    %bl, (%rax)");
 
         // char nextByte;
         // cin.get(nextByte);
         // tape[tape_position] = nextByte;
     }
     if (token == "[")
-    {        
-
-
+    {
 
         loop_num++;
         myStack.push(loop_num);
@@ -789,14 +775,14 @@ void bf_assembler_string(string token)
         string end_label = "end_loop_" + to_string(loop_num);
 
         // Load the pointer from -8(%rbp) into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
 
         // Load byte into %cl (lower 8 bits)
-        *output_file << "movb    (%rax), %cl" << endl;
+        jasm("movb    (%rax), %cl");
         // jump to matching end label if 0
-        *output_file << "cmpb    $0, %cl" << endl;
-        *output_file << "je      " << end_label << endl;
-        *output_file << start_label << ":" << endl;
+        jasm("cmpb    $0, %cl");
+        jasm("je      " + end_label);
+        jasm(start_label + ":");
     }
     if (token == "]")
     {
@@ -805,20 +791,20 @@ void bf_assembler_string(string token)
         string start_label = "start_loop_" + to_string(match_loop);
         string end_label = "end_loop_" + to_string(match_loop);
         // Load the pointer from -8(%rbp) into %rax
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
 
         // Load byte into %cl (lower 8 bits)
-        *output_file << "movb    (%rax), %cl" << endl;
+        jasm("movb    (%rax), %cl");
 
         // jump to matching start label if not 0
-        *output_file << "cmpb    $0, %cl" << endl;
-        *output_file << "jne      " << start_label << endl;
-        *output_file << end_label << ":" << endl;
+        jasm("cmpb    $0, %cl");
+        jasm("jne      " + start_label);
+        jasm(end_label + ":");
     }
 
     if (startsWith(token, "expr_simple:"))
     {
-        //jasm("opt:");
+        // jasm("opt:");
         string sign_of_loop;
 
         // if +, we perform loop 256-255 times
@@ -834,16 +820,16 @@ void bf_assembler_string(string token)
         // 8 bit regists, AH AL BH BL CH CL DH DL
         // ch and bl work
         //  address when we begin the loop
-        *output_file << "movq    -8(%rbp), %rax" << endl;
+        jasm("movq    -8(%rbp), %rax");
 
         if (sign_of_loop == "-")
-            *output_file << "movq    (%rax), %rcx" << endl;
+            jasm("movq    (%rax), %rcx");
 
         if (sign_of_loop == "+")
         {
             // input can't be more than 255 so we're good
-            *output_file << "movq    $256, %rcx " << endl;
-            *output_file << "subq    (%rax), %rcx  " << endl;
+            jasm("movq    $256, %rcx ");
+            jasm("subq    (%rax), %rcx  ");
         }
 
         for (const auto &pair : simple_expr)
@@ -855,19 +841,19 @@ void bf_assembler_string(string token)
             // pair.second = cell +- change per loop
 
             // copy address of the first loop cell
-            *output_file << "movq   %rax, %r12" << endl;
+            jasm("movq   %rax, %r12");
             // adjust pointer by our offset
-            *output_file << "addq   $" << to_string(pair.first) << ", %r12" << endl;
+            jasm("addq   $" + to_string(pair.first) + ", %r12");
             // set our constant change of cell
-            *output_file << "movq    $" << to_string((pair.second)) << ", %r15" << endl;
+            jasm("movq    $" + to_string((pair.second)) + ", %r15");
             // constant multiplied by times loop happens
-            *output_file << "imul   %rcx, %r15" << endl;
+            jasm("imul   %rcx, %r15");
 
-            *output_file << "addb    %r15b , (%r12)" << endl;
+            jasm("addb    %r15b , (%r12)");
         }
         // our loop should always end in 0, this assures it, but would break
         // intentional infinite loops ¯\_(ツ)_/¯, saves us like 5 instr per loop
-        *output_file << "movb    $0, (%rax)" << endl;
+        jasm("movb    $0, (%rax)");
 
         print_padding();
     }
@@ -875,54 +861,55 @@ void bf_assembler_string(string token)
     if (startsWith(token, "expr_seek:"))
     {
         print_padding();
-       
+
         int seek_offset = get_expr_seek_offset(token);
 
-        //cout<< seek_offset<<endl;
-   
+        // cout<< seek_offset<<endl;
+
         seek_loop++;
         string start_label = "start_seek_loop_" + to_string(seek_loop);
         string end_label = "end_seek_loop_" + to_string(seek_loop);
 
-        //jasm("opt:");
+        // jasm("opt:");
         jasm("movq    -8(%rbp), %r8");
-        jasm("movb    (%r8), %cl" );
-        jasm("cmpb    $0, %cl" );
+        jasm("movb    (%r8), %cl");
+        jasm("cmpb    $0, %cl");
 
-        jasm( "je      " + end_label );
-        //this makes our offset masks easier
+        jasm("je      " + end_label);
+        // this makes our offset masks easier
 
-        if(seek_offset > 0){
-        jasm("addq $1, %r8"); 
-        jasm("subq    $32, %r8");
+        if (seek_offset > 0)
+        {
+            jasm("addq $1, %r8");
+            jasm("subq    $32, %r8");
         }
-        else{
-        jasm("subq $1, %r8"); 
-        jasm("addq    $32, %r8");
+        else
+        {
+            jasm("subq $1, %r8");
+            jasm("addq    $32, %r8");
         }
 
         // Loop for checking bytes in chunks of 32
         ////////////////////////////////////////////////////////////
         jasm(start_label + ":");
 
-        if(seek_offset > 0)
-        jasm("addq    $32, %r8");
+        if (seek_offset > 0)
+            jasm("addq    $32, %r8");
         else
-        jasm("subq    $32, %r8"); // CHANGE IF neg i think
+            jasm("subq    $32, %r8"); // CHANGE IF neg i think
 
-        
-        if(abs(seek_offset) == 4)
-        jasm("vmovdqa .four_offset_mask(%rip), %ymm0");
-        if(abs(seek_offset) == 1)
-        jasm("vmovdqa .one_offset_mask(%rip), %ymm0");
-        if(abs(seek_offset) == 2)
-        jasm("vmovdqa .two_offset_mask(%rip), %ymm0");
-        if(abs(seek_offset) == 8)
-        jasm("vmovdqa .eight_offset_mask(%rip), %ymm0");
-        if(abs(seek_offset) == 16)
-        jasm("vmovdqa .sixteen_offset_mask(%rip), %ymm0");
-        if(abs(seek_offset) == 32)
-        jasm("vmovdqa .thirty_two_offset_mask(%rip), %ymm0");
+        if (abs(seek_offset) == 4)
+            jasm("vmovdqa .four_offset_mask(%rip), %ymm0");
+        if (abs(seek_offset) == 1)
+            jasm("vmovdqa .one_offset_mask(%rip), %ymm0");
+        if (abs(seek_offset) == 2)
+            jasm("vmovdqa .two_offset_mask(%rip), %ymm0");
+        if (abs(seek_offset) == 8)
+            jasm("vmovdqa .eight_offset_mask(%rip), %ymm0");
+        if (abs(seek_offset) == 16)
+            jasm("vmovdqa .sixteen_offset_mask(%rip), %ymm0");
+        if (abs(seek_offset) == 32)
+            jasm("vmovdqa .thirty_two_offset_mask(%rip), %ymm0");
 
         jasm("vpor    (%r8), %ymm0, %ymm0");
         jasm("vpxor   %xmm1, %xmm1, %xmm1");
@@ -931,9 +918,10 @@ void bf_assembler_string(string token)
         jasm("testl   %eax, %eax");
         jasm("je      " + start_label);
 
-        if(seek_offset > 0)
-        jasm("bsfl    %eax, %eax");  // CHANGE IF neg i think
-        else{
+        if (seek_offset > 0)
+            jasm("bsfl    %eax, %eax"); // CHANGE IF neg i think
+        else
+        {
             jasm("bsrl    %eax, %eax");
             jasm("subq %32, %rax");
         }
@@ -941,7 +929,6 @@ void bf_assembler_string(string token)
         // save offset
         jasm("addq %rax, %r8");
         jasm("movq    %r8, -8(%rbp)");
-
 
         jasm(end_label + ":");
         print_padding();
@@ -979,13 +966,19 @@ int main(int argc, char *argv[])
             vector_flag = true;
         if (args == "-O1")
             optimization_flag = true;
+        if (args.find(".b") != std::string::npos)
+        {
+            assert(bf_file_name == "");
+
+            bf_file_name = args;
+        }
     }
 
     // Open bf file
-    ifstream inputFile(argv[1]);
+    ifstream inputFile(bf_file_name);
     if (!inputFile)
     {
-        cout << "Couldn't open file: " << argv[1] << endl;
+        cout << "Couldn't open file: " << bf_file_name << endl;
         return 1;
     }
     // Read the file into a vector of chars
@@ -1031,8 +1024,8 @@ int main(int argc, char *argv[])
                     assert(1 == 0);
                 }
 
-                if(simple_loop_flag || optimization_flag)
-                optimized_program = optimize_simple_loop(token, loop_increment, loop, optimized_program);
+                if (simple_loop_flag || optimization_flag)
+                    optimized_program = optimize_simple_loop(token, loop_increment, loop, optimized_program);
 
                 // print_string_vector(optimized_program);
             } // end is simple loop
@@ -1040,12 +1033,12 @@ int main(int argc, char *argv[])
             if (is_power_two_seek_loop(loop))
             {
                 int seek_offset = is_power_two_seek_loop(loop);
-                /// cout << seek_offset << endl;
+                /// cout << seek_offset );
                 // print_string_vector(loop);
-                if(abs(seek_offset) <= 32) // my machine only supports 256bit vectors
+                if (abs(seek_offset) <= 32) // my machine only supports 256bit vectors
 
-                if(vector_flag || optimization_flag)
-                optimized_program = optimize_seek_loop(token, seek_offset, loop, optimized_program);
+                    if (vector_flag || optimization_flag)
+                        optimized_program = optimize_seek_loop(token, seek_offset, loop, optimized_program);
             } // end is power two
 
         } // end looping over loop in program list
