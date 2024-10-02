@@ -1,105 +1,85 @@
+
+flags = -O1
+#$(flags)
 hanoi:
-	g++ -O3 bf.cpp -o jbf
-	./jbf benches/hanoi.b
+	g++ -O3 bf.cpp
+	./a.out benches/hanoi.b -O1
 	@echo "linking.."
 	gcc bf.s 
-	./a.out
+	time ./a.out
+
 mandel:
-	g++ -O3 bf.cpp -o jbf
-	./jbf benches/mandel.b
+	g++ -O3 bf.cpp 
+	./a.out benches/mandel.b -o
 	@echo "linking.."
 	gcc bf.s 
 	./a.out
 
 hello:
 	g++ -O3 bf.cpp -o jbf
-	./jbf benches/hello.b
+	./jbf benches/hello.b -O1
 	@echo "linking.."
 	gcc bf.s 
 	./a.out
 
-input:
-	g++ bf.cpp
-	./a.out benches/input.b
-	@echo "linking.."
-	gcc bf.s 
-	./a.out
-
-simple:
-	g++ bf.cpp
-	./a.out benches/simple.b
-	@echo "linking.."
-	gcc bf.s 
-	./a.out
 test:
 	g++ -O3 bf.cpp -o jbf
-	./jbf benches/hello.b 
+
+	./jbf benches/bench.b $(flags)
 	gcc bf.s 
 	./a.out
-	./jbf benches/deadcodetest.b 
+
+	./jbf benches/bottles.b $(flags)
 	gcc bf.s 
 	./a.out
-	./jbf benches/mandel.b 
+
+	./jbf benches/deadcodetest.b $(flags)
 	gcc bf.s 
 	./a.out
-	./jbf benches/bench.b 
+
+	./jbf benches/hanoi.b $(flags)
 	gcc bf.s 
 	./a.out
-	./jbf benches/loopremove.b 
+
+	./jbf benches/hello.b $(flags)
 	gcc bf.s 
 	./a.out
-	./jbf benches/twinkle.b 
-	gcc bf.s 
-	./a.out
-	./jbf benches/simple.b 
-	gcc bf.s 
-	./a.out
-	./jbf benches/nestedloops.b 
-	gcc bf.s 
-	./a.out
-	./jbf benches/hanoi.b 
-	gcc bf.s 
-	./a.out
-	./jbf benches/bottles.b 
-	gcc bf.s 
-	./a.out
-	./jbf benches/long.b 
+	
+	./jbf benches/long.b $(flags)
 	gcc bf.s
 	@echo -------------starting long.b test, dont panic---------
 	./a.out
-	./jbf benches/serptri.b 
+
+	./jbf benches/loopremove.b $(flags)
 	gcc bf.s 
 	./a.out
-	@echo "All tests completed."
-	@echo
+	
+	./jbf benches/mandel.b $(flags)
+	gcc bf.s 
+	./a.out
 
-test1:
+	./jbf benches/serptri.b $(flags)
+	gcc bf.s 
+	./a.out
+	
+	./jbf benches/twinkle.b $(flags)
+	gcc bf.s 
+	./a.out	
+	@echo "All tests completed."
+
+
+	
+twinkle:
 	g++ -O3 bf.cpp -o jbf
-	./jbf benches/hello.b 
+	./jbf benches/twinkle.b
+	gcc bf.s
+	./a.out
 	
-	./jbf benches/deadcodetest.b 
-	
-	./jbf benches/mandel.b 
-	
-	./jbf benches/bench.b 
-	
-	./jbf benches/loopremove.b 
-	
-	./jbf benches/twinkle.b 
-	
-	./jbf benches/simple.b 
-	
-	./jbf benches/nestedloops.b 
-	
-	./jbf benches/hanoi.b 
-	
-	./jbf benches/bottles.b 
-	
-	./jbf benches/long.b 
-
-	@echo "All tests completed."
-	
-
+check:
+	g++ -O3 bf.cpp -o jbf 
+	./jbf check.b -O1
+	gcc bf.s 
+	./a.out 
 
 
 compile:
