@@ -22,7 +22,9 @@ int seek_loop = -1;
 stack<int> myStack;
 int tape_size = 1048576;
 
-bool optimize = false;
+bool simple_loop_flag = false;
+bool vector_flag = false;
+bool optimization_flag = false;
 
 /*
 jasm, short for josh asm :] outputs to output_file.
@@ -187,6 +189,8 @@ void asm_setup()
     *output_file << ".file	\"bf compiler\"" << endl;
 
     jasm(".section .data");
+
+    if(optimization_flag || vector_flag){
     //offset masks= 1,2,4,8,16
     jasm(".p2align 5");
     jasm(".four_offset_mask:");
@@ -231,7 +235,7 @@ void asm_setup()
     jasm(".quad  282578800148737");
 
 
-           
+    }
  
     
     
@@ -773,7 +777,9 @@ void bf_assembler_string(string token)
         // tape[tape_position] = nextByte;
     }
     if (token == "[")
-    {
+    {        
+
+
 
         loop_num++;
         myStack.push(loop_num);
@@ -812,7 +818,7 @@ void bf_assembler_string(string token)
 
     if (startsWith(token, "expr_simple:"))
     {
-
+        //jasm("opt:");
         string sign_of_loop;
 
         // if +, we perform loop 256-255 times
@@ -862,6 +868,8 @@ void bf_assembler_string(string token)
         // our loop should always end in 0, this assures it, but would break
         // intentional infinite loops ¯\_(ツ)_/¯, saves us like 5 instr per loop
         *output_file << "movb    $0, (%rax)" << endl;
+
+        print_padding();
     }
 
     if (startsWith(token, "expr_seek:"))
@@ -924,9 +932,9 @@ void bf_assembler_string(string token)
         jasm("je      " + start_label);
 
         if(seek_offset > 0)
-        jasm("rep bsfl    %eax, %eax");  // CHANGE IF neg i think
+        jasm("bsfl    %eax, %eax");  // CHANGE IF neg i think
         else{
-            jasm("rep bsrl    %eax, %eax");
+            jasm("bsrl    %eax, %eax");
             jasm("subq %32, %rax");
         }
         /////////////////////////////////////////////////////////////////
@@ -965,8 +973,12 @@ int main(int argc, char *argv[])
     {
         string args = argv[i];
 
-        if (args == "-o")
-            optimize = true;
+        if (args == "-O")
+            simple_loop_flag = true;
+        if (args == "-v")
+            vector_flag = true;
+        if (args == "-O1")
+            optimization_flag = true;
     }
 
     // Open bf file
@@ -995,7 +1007,7 @@ int main(int argc, char *argv[])
     asm_setup();
     print_padding();
 
-    if (optimize)
+    if (simple_loop_flag || vector_flag || optimization_flag)
     {
         vector<string> optimized_program = init_optimized_program_list(program_file);
 
@@ -1019,7 +1031,7 @@ int main(int argc, char *argv[])
                     assert(1 == 0);
                 }
 
-                // print_string_vector(loop);
+                if(simple_loop_flag || optimization_flag)
                 optimized_program = optimize_simple_loop(token, loop_increment, loop, optimized_program);
 
                 // print_string_vector(optimized_program);
@@ -1031,6 +1043,8 @@ int main(int argc, char *argv[])
                 /// cout << seek_offset << endl;
                 // print_string_vector(loop);
                 if(abs(seek_offset) <= 32) // my machine only supports 256bit vectors
+
+                if(vector_flag || optimization_flag)
                 optimized_program = optimize_seek_loop(token, seek_offset, loop, optimized_program);
             } // end is power two
 
@@ -1046,7 +1060,7 @@ int main(int argc, char *argv[])
         // print_string_vector(optimized_program);
     }
 
-    if (!optimize)
+    if (!optimization_flag && !vector_flag && !simple_loop_flag)
     {
         // // begin our program compiler loop
         for (int i = 0; i < program_file.size(); i++)
