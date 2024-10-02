@@ -40,6 +40,9 @@ void print_padding()
     *output_file << endl;
 }
 
+/*
+naive implementation, also easier to debug
+*/
 void bf_assembler(char token)
 {
 
@@ -262,11 +265,11 @@ void asm_setup()
     jasm("movq	%rax, -8(%rbp)");
 
     // Calculate the address 50,000 bytes into the allocated memory
-    jasm("movq    -8(%rbp), %rax");                          // Load base address into %rax
     jasm("addq    $" + to_string(tape_size / 2) + ", %rax"); // Add the offset to %rax
 
     // Store the adjusted pointer back at -8(%rbp)
     jasm("movq    %rax, -8(%rbp)");
+    jasm("movq    -8(%rbp), %r13"); // keep our copy of the cell address at r13
 }
 
 void asm_cleanup()
@@ -667,71 +670,55 @@ int get_expr_seek_offset(string expr)
     return offset;
 }
 
-void bf_assembler_string(string token)
+/*
+our optimized assembler, usees vector strings to store instructions which allow for easier modification of bf source
+we also further optimize by keeping out tape location at register r13
+*/
+void bf_string_assembler(string token)
 {
     // print_padding();
 
     if (token == ">")
     {
-        // Load base address into %rax
-        jasm("movq    -8(%rbp), %rax");
+
         // add one to pointer address
-        jasm("addq    $1, %rax");
-        // Store the adjusted pointer back at -8(%rbp)
-        jasm("movq    %rax, -8(%rbp)");
-        // tape_position++;
+        jasm("addq    $1, %r13");
     }
     if (token == "<")
     {
 
-        // Load base address into %rax
-        jasm("movq    -8(%rbp), %rax");
         // remove one from pointer address
-        jasm("addq    $-1, %rax");
-        // Store the adjusted pointer back at -8(%rbp)
-        jasm("movq    %rax, -8(%rbp)");
-        // tape_position--;
+        jasm("addq    $-1, %r13");
     }
     if (token == "+")
     {
-        // Load base address into %rax
-        jasm("movq    -8(%rbp), %rax");
-        // Load byte into %cl (lower 8 bits)
-        jasm("movb    (%rax), %cl");
+
+        // Load current cell byte into %cl (lower 8 bits)
+        jasm("movb    (%r13), %cl");
 
         // Add 1 to the byte
         jasm("addb    $1, %cl");
 
-        // Store the modified byte back to the address in %rax
-        jasm("movb    %cl, (%rax)");
-
-        // tape[tape_position] += 1;
+        // Store the modified byte back to the address in %r13, our current cell
+        jasm("movb    %cl, (%r13)");
     }
     if (token == "-")
     {
 
-        // Load the pointer from -8(%rbp) into %rax
-        jasm("movq    -8(%rbp), %rax");
-
         // Load byte into %cl (lower 8 bits)
-        jasm("movb    (%rax), %cl");
+        jasm("movb    (%r13), %cl");
 
         // Decrrement byte in %cl
         jasm("subb    $1, %cl");
 
-        // Store the modified byte back to the address in %rax
-        jasm("movb    %cl, (%rax)");
-
-        // tape[tape_position] -= 1;
+        // Store the modified byte back to the address in %r13, our current cell
+        jasm("movb    %cl, (%r13)");
     }
     if (token == ".")
     {
 
-        // Load the pointer from -8(%rbp) into %rax
-        jasm("movq    -8(%rbp), %rax");
-
         // Load the byte from the address into %al (to use with putc)
-        jasm("movb    (%rax), %al");
+        jasm("movb    (%r13), %al");
 
         // Prepare for putc
         // Load file descriptor for stdout into %rsi
@@ -754,11 +741,9 @@ void bf_assembler_string(string token)
         jasm("call    getc@PLT");
         // Move the byte from %al into %bl
         jasm("movb    %al, %bl");
-        // Load the pointer from -8(%rbp) into %rax
-        jasm("movq    -8(%rbp), %rax");
 
-        // Store the byte from %bl into the memory pointed to by %rax
-        jasm("movb    %bl, (%rax)");
+        // Store the byte from %bl into r13 our current cell
+        jasm("movb    %bl, (%r13)");
 
         // char nextByte;
         // cin.get(nextByte);
@@ -774,11 +759,8 @@ void bf_assembler_string(string token)
 
         string end_label = "end_loop_" + to_string(loop_num);
 
-        // Load the pointer from -8(%rbp) into %rax
-        jasm("movq    -8(%rbp), %rax");
-
         // Load byte into %cl (lower 8 bits)
-        jasm("movb    (%rax), %cl");
+        jasm("movb    (%r13), %cl");
         // jump to matching end label if 0
         jasm("cmpb    $0, %cl");
         jasm("je      " + end_label);
@@ -791,10 +773,10 @@ void bf_assembler_string(string token)
         string start_label = "start_loop_" + to_string(match_loop);
         string end_label = "end_loop_" + to_string(match_loop);
         // Load the pointer from -8(%rbp) into %rax
-        jasm("movq    -8(%rbp), %rax");
+        // jasm("movq    -8(%rbp), %rax");
 
         // Load byte into %cl (lower 8 bits)
-        jasm("movb    (%rax), %cl");
+        jasm("movb    (%r13), %cl");
 
         // jump to matching start label if not 0
         jasm("cmpb    $0, %cl");
@@ -819,17 +801,17 @@ void bf_assembler_string(string token)
 
         // 8 bit regists, AH AL BH BL CH CL DH DL
         // ch and bl work
-        //  address when we begin the loop
-        jasm("movq    -8(%rbp), %rax");
+
+        // save current cell contents at start of loop in rcx
 
         if (sign_of_loop == "-")
-            jasm("movq    (%rax), %rcx");
+            jasm("movq    (%r13), %rcx");
 
         if (sign_of_loop == "+")
         {
             // input can't be more than 255 so we're good
             jasm("movq    $256, %rcx ");
-            jasm("subq    (%rax), %rcx  ");
+            jasm("subq    (%r13), %rcx  ");
         }
 
         for (const auto &pair : simple_expr)
@@ -841,7 +823,7 @@ void bf_assembler_string(string token)
             // pair.second = cell +- change per loop
 
             // copy address of the first loop cell
-            jasm("movq   %rax, %r12");
+            jasm("movq   %r13, %r12");
             // adjust pointer by our offset
             jasm("addq   $" + to_string(pair.first) + ", %r12");
             // set our constant change of cell
@@ -853,7 +835,7 @@ void bf_assembler_string(string token)
         }
         // our loop should always end in 0, this assures it, but would break
         // intentional infinite loops ¯\_(ツ)_/¯, saves us like 5 instr per loop
-        jasm("movb    $0, (%rax)");
+        jasm("movb    $0, (%r13)");
 
         print_padding();
     }
@@ -871,22 +853,24 @@ void bf_assembler_string(string token)
         string end_label = "end_seek_loop_" + to_string(seek_loop);
 
         // jasm("opt:");
-        jasm("movq    -8(%rbp), %r8");
-        jasm("movb    (%r8), %cl");
+
+        jasm("movb    (%r13), %cl");
         jasm("cmpb    $0, %cl");
 
         jasm("je      " + end_label);
-        // this makes our offset masks easier
+
+        // this makes our offset masks easier to reason about (i like seeing 32)
+        // subtracting 32, so our loop can always add 32, and on first iterations will be 0.
 
         if (seek_offset > 0)
         {
-            jasm("addq $1, %r8");
-            jasm("subq    $32, %r8");
+            jasm("addq $1, %r13");
+            jasm("subq    $32, %r13");
         }
         else
         {
-            jasm("subq $1, %r8");
-            jasm("addq    $32, %r8");
+            jasm("subq $1, %r13");
+            jasm("addq    $32, %r13");
         }
 
         // Loop for checking bytes in chunks of 32
@@ -894,9 +878,9 @@ void bf_assembler_string(string token)
         jasm(start_label + ":");
 
         if (seek_offset > 0)
-            jasm("addq    $32, %r8");
+            jasm("addq    $32, %r13");
         else
-            jasm("subq    $32, %r8"); // CHANGE IF neg i think
+            jasm("subq    $32, %r13"); // CHANGE IF neg i think
 
         if (abs(seek_offset) == 4)
             jasm("vmovdqa .four_offset_mask(%rip), %ymm0");
@@ -911,7 +895,7 @@ void bf_assembler_string(string token)
         if (abs(seek_offset) == 32)
             jasm("vmovdqa .thirty_two_offset_mask(%rip), %ymm0");
 
-        jasm("vpor    (%r8), %ymm0, %ymm0");
+        jasm("vpor    (%r13), %ymm0, %ymm0");
         jasm("vpxor   %xmm1, %xmm1, %xmm1");
         jasm("vpcmpeqb        %ymm1, %ymm0, %ymm0");
         jasm("vpmovmskb       %ymm0, %eax");
@@ -927,8 +911,7 @@ void bf_assembler_string(string token)
         }
         /////////////////////////////////////////////////////////////////
         // save offset
-        jasm("addq %rax, %r8");
-        jasm("movq    %r8, -8(%rbp)");
+        jasm("addq %rax, %r13");
 
         jasm(end_label + ":");
         print_padding();
@@ -948,6 +931,7 @@ vector<string> optimize_seek_loop(int loop_index, int seek_offset, vector<string
     program[loop_index] = sb;
     return program;
 }
+
 int main(int argc, char *argv[])
 {
 
@@ -996,9 +980,10 @@ int main(int argc, char *argv[])
         cout << "could not create output file" << endl;
         return 2; // Return with an error code
     }
-
+    /*
+    DONT TOUCH register r13! it's where we keep our current cell address
+    */
     asm_setup();
-    print_padding();
 
     if (simple_loop_flag || vector_flag || optimization_flag)
     {
@@ -1047,7 +1032,7 @@ int main(int argc, char *argv[])
         for (int i = 0; i < optimized_program.size(); i++)
         {
             string token = optimized_program[i];
-            bf_assembler_string(token);
+            bf_string_assembler(token);
         }
 
         // print_string_vector(optimized_program);
