@@ -24,7 +24,7 @@ Seek loop
 ---
 #####  Improvements Possible
 
-Simple loops
+Simple loops (wrong, need to recheck)
 > My current definition of a simple loop is that it doesn't contain any simplified loops within. However, simplified simple loops should be able to work. Dr. Regerh mentioned saving the contents of the cell at the beginning of a simple loop at a specified offset and keeping track of it. This way we could essentially merge simple loops that contain simplified simple loops inside with some algebra. Currently, my implementation does something like simple_expr = loop_size*(0:1,1:-2), where the first element is the offset from the original loop cell and the second element is what they do to the cell in each iteration. If we save the loop_size and find the offset between the two loop control cells it should allow us to merge the simple expr's and reach a fixed point. The implementation should be relatively straightforward (as straightforward as writing an algorithm in asm can be) since we're guaranteed to have 0 net pointer movement and only +-1 to our loop cell.
 
 Seek loops (done)
