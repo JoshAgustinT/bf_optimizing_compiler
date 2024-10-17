@@ -7,6 +7,7 @@ https://github.com/JoshAgustinT/bf_optimizing_compiler
 ---
 
 
+
 #####   Definitions
  Simple loop 
 1. Contains no loops or I/O
